@@ -33,13 +33,30 @@ enum primitive
     Image,
     ScaledCroppedImage,
     Rect,
-    Text
+    Text,
+    Circle,
+    Arc
 };
 
 struct TextData
 {
     uint32_t fgcolor;
     const char *text;
+};
+
+struct CircleData
+{
+    int radius;
+    bool filled;
+};
+
+struct ArcData
+{
+    int inner_radius;
+    int outer_radius;
+    int start_angle;
+    int end_angle;
+    bool filled;
 };
 
 struct ImageData
@@ -67,6 +84,8 @@ struct BaseDisplayItem
         struct ImageData image_data;
         struct ImageDataWithSize image_data_with_size;
         struct TextData text_data;
+        struct CircleData circle_data;
+        struct ArcData arc_data;
     } data;
 
     //used just for scaled cropped image
@@ -236,6 +255,59 @@ static void init_item(BaseDisplayItem *item, term req, Context *ctx)
 
 #endif
         }
+
+    } else if (cmd == context_make_atom(ctx, "\x6"
+                                             "circle")) {
+        item->primitive = Circle;
+        item->x = term_to_int(term_get_tuple_element(req, 1));
+        item->y = term_to_int(term_get_tuple_element(req, 2));
+        item->data.circle_data.radius = term_to_int(term_get_tuple_element(req, 3));
+
+        // Check if filled or unfilled
+        term fill_term = term_get_tuple_element(req, 4);
+        if (fill_term == context_make_atom(ctx, "\x6" "filled")) {
+            item->data.circle_data.filled = true;
+        } else {
+            item->data.circle_data.filled = false;
+        }
+
+        item->brcolor = term_to_int(term_get_tuple_element(req, 5)) << 8 | 0xFF;
+
+        // Set bounding box (diameter = 2 * radius)
+        int diameter = item->data.circle_data.radius * 2;
+        item->width = diameter;
+        item->height = diameter;
+        // Adjust x, y to top-left corner of bounding box (center is at original x, y)
+        item->x -= item->data.circle_data.radius;
+        item->y -= item->data.circle_data.radius;
+
+    } else if (cmd == context_make_atom(ctx, "\x3"
+                                             "arc")) {
+        item->primitive = Arc;
+        item->x = term_to_int(term_get_tuple_element(req, 1));
+        item->y = term_to_int(term_get_tuple_element(req, 2));
+        item->data.arc_data.inner_radius = term_to_int(term_get_tuple_element(req, 3));
+        item->data.arc_data.outer_radius = term_to_int(term_get_tuple_element(req, 4));
+        item->data.arc_data.start_angle = term_to_int(term_get_tuple_element(req, 5));
+        item->data.arc_data.end_angle = term_to_int(term_get_tuple_element(req, 6));
+
+        // Check if filled or unfilled
+        term fill_term = term_get_tuple_element(req, 7);
+        if (fill_term == context_make_atom(ctx, "\x6" "filled")) {
+            item->data.arc_data.filled = true;
+        } else {
+            item->data.arc_data.filled = false;
+        }
+
+        item->brcolor = term_to_int(term_get_tuple_element(req, 8)) << 8 | 0xFF;
+
+        // Set bounding box based on outer radius
+        int diameter = item->data.arc_data.outer_radius * 2;
+        item->width = diameter;
+        item->height = diameter;
+        // Adjust x, y to top-left corner of bounding box (center is at original x, y)
+        item->x -= item->data.arc_data.outer_radius;
+        item->y -= item->data.arc_data.outer_radius;
 
     } else {
         fprintf(stderr, "unexpected display list command: ");
